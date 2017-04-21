@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Read image
-img = cv2.imread('ets4.jpg', 0)
+img = cv2.imread('ets.jpg', 0)
 
 # Run threshhold filter
 ret, thresh = cv2.threshold(img, 180, 255, cv2.THRESH_BINARY)
