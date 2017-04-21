@@ -10,17 +10,22 @@ import lanelines
 import videotools
 import screenshot as ss
 
-#image = cv2.imread('ets3.jpg')
-image = ss.grab((22,90,22+1280,90+720))
+def main():
+    while True:
+	    
 
-left, right = lanelines.getLaneLines(image)
+if __name__ == "__main__":
+    #image = cv2.imread('ets3.jpg')
+    image = ss.grab((1,28,1+1280,28+720))
 
-print(left, right)
-if left: cv2.line(image, (left[0],left[1]), (left[2],left[3]), (0,0,255),5)
-if right: cv2.line(image, (right[0],right[1]), (right[2],right[3]), (0,255,0),5)
+    left, right = lanelines.getLaneLines(image)
 
-plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-plt.show()
+    print(left, right)
+    if left: cv2.line(image, (left[0],left[1]), (left[2],left[3]), (0,0,255),5)
+    if right: cv2.line(image, (right[0],right[1]), (right[2],right[3]), (0,255,0),5)
+
+    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    plt.show()
 """
 def addLaneLines(frame):
     left, right = lanelines.getLaneLines(frame)
