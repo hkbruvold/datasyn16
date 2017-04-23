@@ -1,85 +1,101 @@
 #! /usr/bin/env python
 #
-# Contains functions to find lane lines from an image
+# Main file for the autosteering
 #
 
-import imagetools as it
 import cv2
-import math
+import matplotlib.pyplot as plt
+import os
+from os import listdir
+from os.path import isfile, join
 
-resY = 720 # Resolution in Y direction
+import lanelinestools
+import videotools
+import screenshot as ss
+import tfdata
+from tfapplymodel import TFmodel
 
-def getLeftAndRight(lines):
-    # Get one line for each side
-    left, right = None, None
+windowX = 1
+windowY = 28
+
+# Will draw lane lines onto a frame
+def addLaneLines(frame):
+    left, right = lanelinestools.getLaneLines(frame)
+
     try:
-        for line in lines:
-            x0, y0, x1, y1 = line[0]
-            angle = math.atan2(y1 - y0, x1 - x0)
-            if angle < 0:  # A left line
-                left = (x0, y0, x1, y1)
-            else:  # A right line
-                right = (x0, y0, x1, y1)
+        if left: cv2.line(frame, (left[0], left[1]), (left[2], left[3]), (0, 0, 255), 5)
+        if right: cv2.line(frame, (right[0], right[1]), (right[2], right[3]), (0, 255, 0), 5)
     except:
-        print("Warning: Found no lines")
-        print(lines)
-        return None, None
+        print(left, right)
+    finally:
+        return frame
 
-    return left, right
+    return frame
 
-def constrainLine(line, upperY, lowerY):
-    x0, y0, x1, y1 = line
+# Draw lane lines obtained from tensorflow model
+def tfAddLaneLines(tfm, frame):
+    transformed = tfdata.transform(frame)
+    array = tfdata.arrayify(transformed)
+    left, right = tfm.getLines(array)
+    print(left, right)
 
-    if (x1 == x0):
-        return ((x1, x0), (x1, y0))
-    angle = (y1 - y0)/(x1 - x0)
+    # Convert back to pixels
+    left = int(left * 1880 - 200)
+    right = int(right * 1880 - 200)
 
-    if angle == 0:
-        angle = 1
+    cv2.line(frame, (left, 720), (left, 600), (0, 0, 255), 8)
+    cv2.line(frame, (right, 720), (right, 600), (0, 255, 0), 8)
 
-    lowerX = int((lowerY - y0) / angle + x0)
-    upperX = int((upperY - y0) / angle + x0)
+    return frame
 
-    return lowerX, lowerY, upperX, upperY
+# Draw lane lines on all images in folder
+def drawFolder(dir):
+    files = [f for f in listdir(dir) if isfile(join(dir, f))]
 
-def getLaneLines(image):
-    # Convert to grayscale
-    gray = it.toGrayscale(image)
+    for file in files:
+        image = cv2.imread(dir+file)
+        image = addLaneLines(image)
+        cv2.imwrite('out/'+file, image)
 
-    # Apply mask to remove unnecessary information
-    masked = it.applyMask(gray, 'mask%i.png'%(resY))
+# Draw lane line on a single image file
+def drawFile(filename):
+    image = cv2.imread(filename)
+    image = addLaneLines(image)
+    cv2.imwrite("laned_"+filename, image)
 
-    # Apply threshold filter
-    l = int(0.50*len(masked[0]))
-    t = int(0.66*len(masked))
-    mean = cv2.mean(gray[t:t+5,l:l+5])[0] # Find mean brightness of road to be used as threshold
-    thresh = it.applyThreshold(masked, 2*mean)
+# Grab screenshot and draw lines onto it
+def scrDraw():
+    while True:
+        image = ss.grab((windowX, windowY, windowX + 1280, windowY + 720))
 
-    # Apply gaussian blur to "grow" the white lines, and fill salty lane lines
-    blur = it.applyBlur(thresh, 11)
+        left, right = lanelinestools.getLaneLines(image)
 
-    # Apply threshold again to get binary image
-    thresh2 = it.applyThreshold(blur, 2)
+        if left: print(left[0], end=" ")
+        if right: print(right[0], end=" ")
+        print()
 
-    # Apply median filter to remove salt "noise"
-    median = it.applyMedianFilter(thresh2, 11)
+# Draw lines on all frames of a video file
+def drawVideo(filename):
+    video = videotools.openVideo(filename)
+    laneVideo = videotools.applyFilter(video, addLaneLines)
+    videotools.saveVideo(laneVideo, "laned_"+filename)
 
-    # Run Canny edge detection to find edges
-    edges = it.applyCanny(median, 150, 160)
+def tfDrawFolder(tfm, dir):
+    files = [f for f in listdir(dir) if isfile(join(dir, f))]
 
-    # Find lines from edges using Hough Transform
-    lines = it.getHoughLines(edges, 50, 100, 100)
-
-    # Get left and right lines
-    left, right = getLeftAndRight(lines)
-
-    # Constrain lines between y=750 and y=1080
-    if left: left = constrainLine(left, int(0.7*resY), resY)
-    if right: right = constrainLine(right, int(0.7*resY), resY)
-
-    return left, right
-
-
+    for file in files:
+        image = cv2.imread(os.path.join(dir, file))
+        image = tfAddLaneLines(tfm, image)
+        cv2.imwrite(os.path.join("tflaned", file), image)
 
 
+def main():
+    #drawFolder("screenshots/")
+    #scrDraw()
+    #drawVideo("ets2.mp4")
+    #drawFile("et.jpg")
+    tfm = TFmodel("lane-model")
+    tfDrawFolder(tfm, "nn_frames")
 
+if __name__ == "__main__":
+    main()
